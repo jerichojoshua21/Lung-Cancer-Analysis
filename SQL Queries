@@ -1,278 +1,249 @@
--- Identified that there are 55500 Rows and 15 Columns.
-SELECT 
-    (SELECT COUNT(*) FROM health_data1) AS row_count,
-    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
-     WHERE TABLE_SCHEMA = 'healthcare_data' AND TABLE_NAME = 'health_data1') AS column_count
-     ;
----------------------------------------------------------------------------------------------
--- Created several tables to secure the original data on the data set.
-CREATE TABLE health_data5
-LIKE health_data4
+SELECT
+	(SELECT COUNT(*) FROM lung_cancer_data) AS RowCounts,
+	(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+	WHERE TABLE_SCHEMA = 'lung_cancer' AND TABLE_NAME = 'lung_cancer_data') AS ColumnCounts
 ;
 
-INSERT health_data5
+CREATE TABLE lung_cancer_data1
+LIKE lung_cancer_data
+;
+
+INSERT lung_cancer_data1
 SELECT *
-FROM health_data4
+FROM lung_cancer_data
 ;
 
+DESC lung_cancer_data1
+;
+
+SELECT*
+FROM lung_cancer_data1
+;
+------ BASIC_LEVEL ------
+-- 1. Retrieve all records for individuals diagnosed with lung cancer.
 SELECT *
-FROM health_data5
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis = 'Yes'
 ;
----------------------------------------------------------------------------------------------
--- DATA CLEANING PROCESS --
--- STANDARDIZING THE NAMES USING SUBSTRINGS (Can also update the names using this query)
-UPDATE health_data3
-	SET `Name` =CONCAT(
-	UPPER(SUBSTRING(`Name`, 1, 1)),
-	LOWER(SUBSTRING(SUBSTRING_INDEX(`Name`, ' ', 1), 2)),
-    ' ',
-    UPPER(SUBSTRING(SUBSTRING_INDEX(`Name`, ' ', -1), 1, 1)),
-    LOWER(SUBSTRING(SUBSTRING_INDEX(`Name`, ' ', -1), 2))
-	)
-WHERE `Name` IS NOT NULL
+-- 2. Count the number of smokers and non-smokers. In this question I used CASE statement to identify the counts of smokers and non-smokers.
+SELECT
+	SUM(CASE
+		WHEN Smoker LIKE 'Yes' THEN 1 ELSE 0 END) AS Smokers,
+	SUM(CASE
+        WHEN Smoker LIKE 'No' THEN 1 ELSE 0 END) AS `Non Smoker`
+FROM lung_cancer_data1
 ;
----------------------------------------------------------------------------------------------
--- Updated the name into a proper format Hospital names.
-UPDATE health_data2
-SET Hospital = CONCAT(
-    TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(Hospital, ' and', 1), ' ', -1)), -- Extract "Rich"
-    ' and Sons' -- Append "and Sons"
-)
-WHERE Hospital LIKE 'Sons % and';
-
-UPDATE health_data3
-SET Hospital = CONCAT(
-    TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(Hospital, ' and', 1), ' ', 1)),
-    ' and Sons' -- Append "and Sons"
-)
-WHERE Hospital LIKE '% Sons and';
-
--- Removed dash line extra "and" and extra spaces using this query.
-UPDATE health_data3
-SET Hospital = TRIM(REPLACE(Hospital, ' and', ''))
-WHERE Hospital LIKE '% and';
----------------------------------------------------------------------------------------------
--- Updating the patient's gender. 
-SELECT DISTINCT `Name`, Gender
-FROM health_data4
-WHERE `Name` LIKE 'A%'
-GROUP BY `Name`, Gender
-ORDER BY `Name`
+-- 3. List all unique cancer stages present in the dataset.
+SELECT DISTINCT Cancer_Stage
+FROM lung_cancer_data1
+WHERE Cancer_Stage != 'None'
 ;
-
-UPDATE health_data4
-SET Gender = 'Male'
-WHERE `Name` LIKE 'Zach%'
-AND Gender = 'Female'
+-- 4. Retrieve the average number of cigarettes smoked per day by smokers.
+SELECT AVG(Cigarettes_per_Day) AS `Average Cigarette Per Day`
+FROM lung_cancer_data1
 ;
-
-UPDATE health_data3
-SET Gender = 'Female'
-WHERE `Name` LIKE 'Zoe%'
-AND Gender = 'Male'
+-- 5. Count the number of people exposed to high air pollution.
+SELECT COUNT(Population_Size) AS `High Exposed`, Air_Pollution_Exposure
+FROM lung_cancer_data1
+WHERE Air_Pollution_Exposure LIKE 'High'
+GROUP BY Air_Pollution_Exposure
 ;
----------------------------------------------------------------------------------------------
--- Rounded the Billing Amount to lessen the decimal point
--- and Change the data type of Date of Admission and Discharge Date to DATE.
-UPDATE health_data4
-SET `Billing Amount` = ROUND(`Billing Amount`, 2)
-WHERE `Billing Amount` IS NOT NULL
-;
-ALTER TABLE health_data4
-MODIFY COLUMN `Date of Admission` DATE
-;
-ALTER TABLE health_data4
-MODIFY COLUMN `Discharge Date` DATE
-;
----------------------------------------------------------------------------------------------
--- Identified that there are duplicate data in the data set using CTE.
-WITH CTE AS (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            PARTITION BY `Name`,
-                `Date of Admission`,
-                `Discharge Date`,
-                `Billing Amount`,
-                `Insurance Provider`
-        ) AS Duplicates
-    FROM health_data5
-)
-SELECT * 
-FROM CTE 
-WHERE Duplicates > 1;
-
--- Removing or Deleting duplicates in the data set using CTE.
-WITH CTE AS (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            PARTITION BY `Name`,
-                `Date of Admission`,
-                `Discharge Date`,
-                `Billing Amount`,
-                `Insurance Provider`
-        ) AS Duplicates
-    FROM health_data5
-)
-DELETE
-FROM health_data5
-WHERE (`Name`, `Date of Admission`, `Discharge Date`, `Billing Amount`, `Insurance Provider`) IN (
-    SELECT `Name`, `Date of Admission`, `Discharge Date`, `Billing Amount`, `Insurance Provider`
-    FROM CTE 
-    WHERE Duplicates > 1)
-;
-
-SELECT *
-FROM health_data5
-;
----------------------------------------------------------------------------------------------
--- Categorizing the Case Level of the patients based on the days they were admitted using CASE STATEMENT.
-SELECT `Name`,
-       DATEDIFF(`Discharge Date`, `Date of Admission`) AS `Admission Days`,
-       CASE
-           WHEN DATEDIFF(`Discharge Date`, `Date of Admission`) <= 10 THEN 'Primary Care'
-           WHEN DATEDIFF(`Discharge Date`, `Date of Admission`) <= 20 THEN 'Secondary Care'
-           ELSE 'Tertiary Care'
-       END AS `Case Level`
-FROM health_data5
-;
----------------------------------------------------------------------------------------------
--- Questions
--- What is the total number of patients admitted?
-SELECT COUNT(*) AS Total_Admitted
-FROM health_data5
-;
--- What is the average billing amount?
-SELECT ROUND(AVG(`Billing Amount`), 2) AS Average_Bill
-FROM health_data5
-;
--- How many patients are admitted by each Doctor?
-SELECT DISTINCT Doctor, COUNT(*) AS Patient_Count
-FROM health_data5
-GROUP BY Doctor
-ORDER BY Patient_Count DESC
-LIMIT 10
-;
--- What is the Gender distribution of admitted patients?
-SELECT Gender, COUNT(*) Gender_Count
-FROM health_data5
-GROUP BY Gender
-;
--- What is the total number of admission per day?
-SELECT `Date of Admission`, COUNT(*) AS Daily_Admission
-FROM health_data5
-GROUP BY `Date of Admission`
-ORDER BY `Date of Admission`
-;
--- How many patients have been discharged?
-SELECT `Discharge Date`, COUNT(*) AS Discharge_Count
-FROM health_data5
-GROUP BY `Discharge Date`
-ORDER BY `Discharge Date`
-;
--- What is the average duration of hospital stays (from admission to discharge)?
-SELECT AVG(DATEDIFF(`Discharge Date`, `Date of Admission`)) AS Hospital_Stay
-FROM health_data5
-WHERE `Discharge Date` IS NOT NULL
-;
--- Which hospital has the highest total billing amount?
-SELECT Hospital, ROUND(SUM(`Billing Amount`)) AS Highest_Bill
-FROM health_data5
-GROUP BY Hospital
-ORDER BY Highest_Bill DESC
-LIMIT 1
-;
--- What is the total billing amount for each insurance provider?
-SELECT `Insurance Provider`, ROUND(AVG(`Billing Amount`)) AS Total_Bill
-FROM health_data5
-GROUP BY `Insurance Provider`
-ORDER BY Total_Bill DESC
-;
--- What is the highest billing amount, and which patient incurred it?
-SELECT `Name`, ROUND(SUM(`Billing Amount`)) AS Highest_Patient_Bill
-FROM health_data5
-GROUP BY `Name`
-ORDER BY Highest_Patient_Bill DESC
+-- 6. Find the top 5 countries with the highest lung cancer deaths.
+SELECT DISTINCT Country, Annual_Lung_Cancer_Deaths
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis LIKE 'Yes'
+ORDER BY Annual_Lung_Cancer_Deaths DESC
 LIMIT 5
 ;
---  Which blood type is the most common among admitted patients?
-SELECT `Blood Type`, COUNT(*) AS Blood_Type_Count
-FROM health_data5
-GROUP BY `Blood Type`
-ORDER BY Blood_Type_Count DESC
-LIMIT 8
+-- 7. Count the number of people diagnosed with lung cancer by gender.
+SELECT Gender, COUNT(Lung_Cancer_Diagnosis) AS Counts
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis LIKE 'Yes'
+GROUP BY Gender, Lung_Cancer_Diagnosis
 ;
--- What are the most common medical conditions among admitted patients?
-SELECT `Medical Condition`, COUNT(*) AS Common_Condition
-FROM health_data5
-GROUP BY `Medical Condition`
-ORDER BY Common_Condition DESC
+-- This query only serves as a basis for the total count of people diagnosed with lung cancer.
+SELECT COUNT(Lung_Cancer_Diagnosis)
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis LIKE 'Yes'
 ;
--- What is the distribution of admission types?
-SELECT `Admission Type`, COUNT(*) AS Admission_Count
-FROM health_data5
-GROUP BY `Admission Type`
+-- 8. Retrieve records of individuals older than 60 who are diagnosed with lung cancer.
+SELECT ID, Age, Lung_Cancer_Diagnosis
+FROM lung_cancer_data1
+WHERE Age > 60
+AND Lung_Cancer_Diagnosis LIKE 'Yes'
 ;
--- Which room numbers have been used the most?
-SELECT `Room Number`, COUNT(*) Room_Usage
-FROM health_data5
-GROUP BY `Room Number`
-ORDER BY Room_Usage DESC
+------ INTERMEDIATE_LEVEL ------
+-- 1. Find the percentage of smokers who developed lung cancer.
+SELECT 
+    ROUND(
+		(COUNT(CASE 
+			WHEN Smoker = 'Yes' THEN 1
+			WHEN Lung_Cancer_Diagnosis = 'Yes' THEN 1 END)
+			* 100.0 / COUNT(*)), 2) AS `% of Smoker with Lung Cancer`
+FROM lung_cancer_data1
 ;
--- Which doctor has handled the most discharges?
-SELECT Doctor, COUNT(*) AS Discharge_Count
-FROM health_data5
-WHERE `Discharge Date` IS NOT NULL
-GROUP BY Doctor
-ORDER BY Discharge_Count DESC
+SELECT *
+FROM lung_cancer_data1
+;
+
+SELECT COUNT(Smoker)
+FROM lung_cancer_data1
+WHERE Smoker = 'Yes'
+;
+-- 2. Calculate the average survival years based on cancer stages.
+SELECT Cancer_Stage, AVG(Survival_Years) `Average Survival Years`
+FROM lung_cancer_data1
+WHERE Cancer_Stage != 'None'
+GROUP BY Cancer_Stage
+ORDER BY Cancer_Stage ASC
+;
+-- 3. Count the number of lung cancer patients based on passive smoking.
+SELECT Passive_Smoker, COUNT(Lung_Cancer_Diagnosis) AS `Passive Smoker Who Developed Lung Cancer`
+FROM lung_cancer_data1
+WHERE Passive_Smoker = 'Yes'
+;
+-- 4. Find the country with the highest lung cancer prevalence rate.
+SELECT Country, MAX(Lung_Cancer_Prevalence_Rate) AS `Highest Prevalence Rate`
+FROM lung_cancer_data1
+GROUP BY Country
+ORDER BY `Highest Prevalence Rate` DESC
+;
+-- with this query, i just checked the cancer prevalence rate.
+SELECT DISTINCT Lung_Cancer_Prevalence_Rate
+FROM lung_cancer_data1
+ORDER BY Lung_Cancer_Prevalence_Rate DESC
+;
+-- 5. Identify the smoking years impact on lung cancer.
+SELECT Years_of_Smoking, COUNT(*) AS `Smoking Years Impact`
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis = 'Yes'
+GROUP BY Years_of_Smoking
+ORDER BY Years_of_Smoking ASC
+;
+-- 6. Determine the mortality rate for patients with and without early detection.
+SELECT
+	Early_Detection,
+    COUNT(*) AS `Total Patients`, -- Counts of patients by Early Detection
+		SUM(CASE WHEN Mortality_Rate = 'Yes' THEN 1 ELSE 0 END) AS `Deceased`,
+		(SUM(CASE WHEN Mortality_Rate = 'Yes' THEN 1 ELSE 0 END) * 100.0/COUNT(*)) AS `Rate`
+FROM lung_cancer_data1
+GROUP BY Early_Detection
+;
+SELECT Early_Detection,
+	COUNT(CASE WHEN Lung_Cancer_Diagnosis = 'Yes' AND Survival_Years = 1 THEN 1 END) * 100 /
+	COUNT(CASE WHEN Lung_Cancer_Diagnosis = 'Yes' THEN 1 END) AS `Mortality Rate`
+FROM lung_cancer_data1
+GROUP BY Early_Detection
+;
+-- 7. Group the lung cancer prevalence rate by developed vs. developing countries.
+SELECT
+	Country, Developed_or_Developing, ROUND(AVG(Lung_Cancer_Prevalence_Rate), 2) AS `Prevalence Rate`
+FROM lung_cancer_data1
+GROUP BY Developed_or_Developing, Country
+ORDER BY Developed_or_Developing
+;
+------ ADVANCED_LEVEL ------
+-- 1. Identify the correlation between lung cancer prevalence and air pollution levels.
+SELECT 
+    Air_Pollution_Exposure, 
+	ROUND(AVG(Lung_Cancer_Prevalence_Rate), 5) AS `Average Prevalence`
+FROM lung_cancer_data1
+GROUP BY Air_Pollution_Exposure
+ORDER BY Air_Pollution_Exposure
+;
+SELECT Lung_Cancer_Prevalence_Rate, Air_Pollution_Exposure
+FROM lung_cancer_data1
+ORDER BY Air_Pollution_Exposure
 LIMIT 10
 ;
--- What medications are prescribed most frequently?
-SELECT `Medication`, COUNT(*) AS Most_Prescribed
-FROM health_data5
-GROUP BY `Medication`
-ORDER BY Most_Prescribed
+-- 2. Find the average age of lung cancer patients for each country.
+SELECT DISTINCT Country, ROUND(AVG(Age)) AS `Average Age of Lung Cancer Patients`
+FROM lung_cancer_data1
+GROUP BY Country
 ;
--- Which test results are the most common?
-SELECT `Test Results`, COUNT(*) AS Common_Result
-FROM health_data5
-GROUP BY `Test Results`
-ORDER BY Common_Result DESC
+-- 3. Calculate the risk factor of lung cancer by smoker status, passive smoking, and family history.
+SELECT COUNT(*) AS `Risk Factor`, Smoker, Passive_Smoker, Family_History
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis = 'Yes'
+GROUP BY Smoker, Passive_Smoker, Family_History
+ORDER BY `Risk Factor` DESC
 ;
--- Identify the numbers of pateints admitted per month.
-SELECT DISTINCT DATE_FORMAT(`Date of Admission`, '%m-%Y') AS `Admission Per Month`, COUNT(*) AS `Admitted Patients`
-FROM health_data5
-GROUP BY `Admission Per Month`
-ORDER BY `Admitted Patients` DESC
+-- 4. Rank countries based on their mortality rate.
+-- In this query I used CTE to generate the 'Death Rate' and included a CASE statement to get the rankings of countries
+WITH MortalityByCountry AS (
+    SELECT 
+        Country, 
+        SUM(CASE WHEN Lung_Cancer_Diagnosis = 'Yes' THEN 1 ELSE 0 END),
+        ROUND(SUM(Lung_Cancer_Prevalence_Rate), 2) / COUNT(*) AS `Death Rate`
+    FROM lung_cancer_data1
+    GROUP BY Country
+)
+SELECT 
+    RANK() OVER(ORDER BY `Death Rate` DESC) AS `Rank of Countries`, 
+    Country,
+    `Death Rate`
+FROM MortalityByCountry
 ;
----------------------------------------------------------------------------------------------
-SELECT DISTINCT DATE_FORMAT(`Date of Admission`, '%m-%Y') AS `Admission Per Month`, COUNT(*) AS `Admitted Patients`
-FROM health_data5
-GROUP BY `Admission Per Month`
-ORDER BY `Admission Per Month`
+-- 5. Determine if treatment type has a significant impact on survival years.
+SELECT Treatment_Type, AVG(Survival_Years) AS `Surviving Years`
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis = 'Yes'
+GROUP BY Treatment_Type
+;
+-- 6. Compare lung cancer prevalence in men vs. women across countries.
+SELECT Country,
+		ROUND(AVG(CASE WHEN Gender LIKE 'Male' THEN Lung_Cancer_Prevalence_Rate END), 2) AS Male,
+		ROUND(AVG(CASE WHEN Gender LIKE 'Female' THEN Lung_Cancer_Prevalence_Rate END), 2) AS Female
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis = 'Yes'
+GROUP BY Country
+ORDER BY Country
+;
+-- 7. Find how occupational exposure, smoking, and air pollution collectively impact lung cancer rates.
+-- By including the average of Lung_Cancer_Prevalence_Rate, we are able to retrieve the Lung cancer rate.
+SELECT Occupational_Exposure,
+		Smoker,
+        Air_Pollution_Exposure,
+        ROUND(AVG(Lung_Cancer_Prevalence_Rate), 2) AS `Lung Cancer Rates`
+FROM lung_cancer_data1
+WHERE	Lung_Cancer_Diagnosis = 'Yes'
+GROUP BY Occupational_Exposure,
+		Smoker,
+		Air_Pollution_Exposure
+;
+-- 8. Analyze the impact of early detection on survival years.
+SELECT Early_Detection, AVG(Survival_Years) AS `Survival Years`
+FROM lung_cancer_data1
+WHERE Lung_Cancer_Diagnosis = 'Yes'
+GROUP BY Early_Detection
+ORDER BY `Survival Years` DESC
+;
+-- Adding Risk_Score into the table for Data Visualization Purpose
+SELECT *
+FROM (
+    SELECT *,
+        (CASE WHEN Smoker = 'Yes' THEN 3 ELSE 0 END +
+         CASE WHEN Passive_Smoker = 'Yes' THEN 2 ELSE 0 END +
+         CASE WHEN Family_History = 'Yes' THEN 2 ELSE 0 END +
+         CASE WHEN Air_Pollution_Exposure = 'High' THEN 3 
+              WHEN Air_Pollution_Exposure = 'Medium' THEN 1 
+              ELSE 0 END
+        ) AS Risk_Score
+    FROM lung_cancer_data1
+) AS Risk
+;
+-- Data Pre-processing and Cleaning(Handle Missing Data, Remove Duplicates,Convert Data Types etc)
+SELECT ID, COUNT(*) AS Duplicates
+FROM lung_cancer_data1
+GROUP BY ID
+HAVING Duplicates > 1
 ;
 
-SELECT DISTINCT *,
- CASE 
-	WHEN `Admission Type` LIKE 'Elective' THEN 'Primary Care'
-	WHEN `Admission Type` LIKE 'Urgent' THEN 'Secondary Care'
-	ELSE 'Tertiary Care'
-	END AS `Care Level`
-FROM health_data5
-;
-
-SELECT DISTINCT `Room Number`
-FROM health_data5
-ORDER BY `Room Number` DESC
-;
-
-SELECT DISTINCT `Medical Condition`
-FROM health_data5
-;
-
-SELECT SUM(`Billing Amount`) AS `Total Bill`
-FROM health_data5
+DESC lung_cancer_data1
 ;
 
 SELECT *
 FROM lung_cancer_data1
 ;
+
+SELECT *
