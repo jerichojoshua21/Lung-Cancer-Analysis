@@ -1,8 +1,8 @@
-Project Overview
+**Project Overview**
 
 This project aims to analyze and predict lung cancer cases through data-driven approaches, leveraging machine learning and visualization techniques. By examining key factors such as smoking history, age, cancer stage, and survival duration, the study develops predictive models and extracts meaningful insights. These findings support early diagnosis efforts and enhance treatment strategies for improved patient outcomes.
 
-Tools & Technologies Utilized
+**Tools & Technologies Utilized**
 
 MySQL – Employed for efficient data storage, retrieval, and analytical querying.
 
@@ -12,7 +12,7 @@ DAX (Data Analysis Expressions) – Applied within Power BI to develop calculate
 
 
 
-Project Objective
+**Project Objective**
 
 Develop predictive models to assess the probability of lung cancer based on multiple risk factors.
 
